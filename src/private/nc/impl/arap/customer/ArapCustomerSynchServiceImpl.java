@@ -8,6 +8,7 @@ import nc.bs.arap.util.BillUtils;
 import nc.bs.arap.util.TransUtils;
 import nc.bs.framework.common.InvocationInfoProxy;
 import nc.bs.framework.common.NCLocator;
+import nc.bs.logging.Logger;
 import nc.itf.arap.customer.IArapCustomerSynchService;
 import nc.itf.bd.cust.baseinfo.ICustBaseInfoExtendService;
 import nc.ui.bd.pub.extend.PrivateServiceContext;
@@ -113,11 +114,14 @@ public class ArapCustomerSynchServiceImpl implements IArapCustomerSynchService {
 				vo.setPk_org(pk_org);
 				vo.setPk_timezone(countryZone.getPk_timezone());
 				vo.setStatus(2);
-				//保存时会自动补充
-				//vo.setCreationtime(new UFDateTime());
-				//vo.setCreator(pk_user);
 				
+				String sql = "select count(*) from bd_customer t where t.dr =0 and t.code = '" +jsonCust.getString("code")+ "' and t.pk_org in ('" +pk_group+ "', '" +pk_org+ "')";
+				if(importUtils.isBillExit(sql)) {
+					Logger.error("[SDPG][" + ArapCustomerSynchServiceImpl.class.getName() + "],客户编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
+					throw new BusinessException("客户编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
+				} 
 				service.insertCustomerWithExtendVO(vo, new HashMap<String, Object>(), new PrivateServiceContext(), false);
+				
 			} else if(StringUtils.equals(opType, "0")) {
 				//删除
 				CustomerVO vo = importUtils.getCustomerVOByCode(code, pk_group, pk_org);

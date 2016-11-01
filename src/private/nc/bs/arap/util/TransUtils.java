@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.Set;
 
 import nc.bs.dao.BaseDAO;
-import nc.bs.dao.DAOException;
 import nc.bs.dbcache.intf.IDBCacheBS;
 import nc.bs.framework.common.NCLocator;
 import nc.bs.logging.Logger;
@@ -82,7 +81,7 @@ public class TransUtils {
 		try {
 			AccAssItemVO vo = (AccAssItemVO) baseDAO.retrieveByPK(AccAssItemVO.class, pk_accassitem);
 			return vo;
-		} catch (DAOException e) {
+		} catch (Exception e) {
 			throw new BusinessException("辅助核算项["+pk_accassitem+"]不存在，"+e.getMessage());
 		}
 	}
@@ -111,7 +110,7 @@ public class TransUtils {
 			BaseDAO baseDAO = new BaseDAO();
 			Collection<AccountingBookVO> vos = baseDAO.retrieveByClause(AccountingBookVO.class, "dr = 0 and accounttype = 1 and pk_group = '" +pk_group+ "' and pk_relorg = '" +pk_org+ "' ");
 			return vos.toArray(new AccountingBookVO[vos.size()])[0];
-		} catch (DAOException e) {
+		} catch (Exception e) {
 			throw new BusinessException("财务组织["+pk_org+"]对应的主核算账簿不存在，"+e.getMessage());
 		} 
 	}
@@ -121,9 +120,9 @@ public class TransUtils {
 	public VoucherTypeVO getVoucherType(String pk_group, String pk_org, String code) throws BusinessException {
 		try {
 			BaseDAO baseDAO = new BaseDAO();
-			Collection<VoucherTypeVO> vos = baseDAO.retrieveByClause(VoucherTypeVO.class, "dr = 0 and enablestate = 2 and pk_group = '" +pk_group+ "' and pk_org in ('" +pk_org+ "', 'GLOBLE00000000000000') and code = '" +code+ "' ");
+			Collection<VoucherTypeVO> vos = baseDAO.retrieveByClause(VoucherTypeVO.class, "dr = 0 and enablestate = 2 and pk_org in ('" +pk_group+ "', '" +pk_org+ "', 'GLOBLE00000000000000') and code = '" +code+ "' ");
 			return vos.toArray(new VoucherTypeVO[vos.size()])[0];
-		} catch (DAOException e) {
+		} catch (Exception e) {
 			throw new BusinessException("编码["+code+"]对应的凭证类型不存在，"+e.getMessage());
 		} 
 	}
@@ -279,24 +278,6 @@ public class TransUtils {
 			return vos.toArray(new DeptVO[vos.size()])[0];
 		} catch (Exception e) {
 			throw new BusinessException("部门["+code+"]不存在；");
-		}
-	}
-	
-	//取bill里外系统单据号
-	public static String getExBillNo(JSONObject  bill) {
-		try {
-			return bill.getJSONObject("parent").getString("def1");
-		} catch(Exception e) {
-			return "[未知单据号]";
-		}
-	}
-	
-	//去凭证里的单据号
-	public static String getVoucherBillNo(JSONObject  voucher) {
-		try {
-			return voucher.getString("free4");
-		} catch(Exception e) {
-			return "[未知单据号]";
 		}
 	}
 	
@@ -491,7 +472,7 @@ public class TransUtils {
 		int count = 0;
 		try {
 			count = (Integer)baseDAO.executeQuery(sql, new ColumnProcessor());
-		} catch (DAOException e) {
+		} catch (Exception e) {
 			throw new BusinessException("单据是否重复验证时出错！");
 		}
 		return count > 0;

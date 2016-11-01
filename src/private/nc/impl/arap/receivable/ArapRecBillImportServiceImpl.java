@@ -3,7 +3,6 @@ package nc.impl.arap.receivable;
 import nc.bs.arap.util.BillUtils;
 import nc.bs.arap.util.DateUtils;
 import nc.bs.arap.util.FileUtils;
-import nc.bs.arap.util.TransUtils;
 import nc.bs.logging.Logger;
 import nc.fi.arap.pubutil.RuntimeEnv;
 import nc.itf.arap.receivable.IArapRecBillImportService;
@@ -35,30 +34,35 @@ public class ArapRecBillImportServiceImpl implements IArapRecBillImportService {
 	};
 	
 	@Override
-	public String arRecBillImport(String jsonStrBill) {
+	public String arRecBillImport(String jsonStrBills) {
 		JSONObject rt = new JSONObject();
-		rt.put("result", "success");
-		rt.put("message", "");
+		JSONArray rtArray = new JSONArray();
 		try {
-			JSONArray billsArray = JSONArray.fromObject(jsonStrBill);
-			StringBuffer errMsg = new StringBuffer();
+			JSONArray billsArray = JSONArray.fromObject(jsonStrBills);
+			Logger.info("[SDPG][" + ArapRecBillImportServiceImpl.class.getName() + "],总共接受数据" +billsArray.size()+ "条。");
 			JSONObject bill = null;
 			for(int i=0; i<billsArray.size(); i++) {
 				bill = billsArray.getJSONObject(i);
-				errMsg.append(this.checkFieldExist(bill));
+				String checkRtMsg = this.checkFieldExist(bill);
+				if(StringUtils.isNotBlank(checkRtMsg)) {
+					billsArray.remove(i);
+					JSONObject rtJson = new JSONObject();
+					rtJson.put("FROMSYS", BillUtils.getArapBillSourceSys(bill));
+					rtJson.put("NUMBER", BillUtils.getArapBillSourceNo(bill));
+					rtJson.put("COMPLETED", "0");
+					rtJson.put("MESSAGE", checkRtMsg);
+					rtArray.add(rtJson);
+					Logger.error("[SDPG][" + ArapRecBillImportServiceImpl.class.getName() + "],单据" +BillUtils.getArapBillSourceNo(bill) + "接收失败，问题原因：" + checkRtMsg);
+				}
 			}
-			if(StringUtils.isBlank(errMsg.toString())) {
-				FileUtils.serializeJSONArrayToFile(billsArray, RuntimeEnv.getNCHome() + "/modules/arap/outterdata/ar/");
-			} else {
-				rt.put("result", "fail");
-				rt.put("message", "JSONArray字符串格式错误：" + errMsg.toString());
-				Logger.error("JSONArray字符串格式错误：" + errMsg.toString());
-			}
-		} catch (Exception e1) {
-			rt.put("result", "fail");
-			rt.put("message", "JSONArray字符串格式错误或实例化到本地失败:" + e1.getMessage());
-			Logger.error("JSONArray字符串格式错误或实例化到本地失败:", e1);
+			Logger.info("[SDPG][" + ArapRecBillImportServiceImpl.class.getName() + "]," +billsArray.size()+ "条数据正在往本地缓存...");
+			FileUtils.serializeJSONArrayToFile(billsArray, RuntimeEnv.getNCHome() + "/modules/arap/outterdata/ar/");
+			Logger.info("[SDPG][" + ArapRecBillImportServiceImpl.class.getName() + "],缓存成功" +billsArray.size()+ "条数据。");
+		} catch (Exception e) {
+			Logger.error("[SDPG][" + ArapRecBillImportServiceImpl.class.getName() + "],JSONArray字符串格式错误或实例化到本地失败,原因:", e);
+			Logger.error("[SDPG][" + ArapRecBillImportServiceImpl.class.getName() + "],缓存失败的JSONArray字符串：" + jsonStrBills);
 		}
+		rt.put("LST_MESSAGE", rtArray);
 		return rt.toString();
 	}
 	
@@ -112,7 +116,7 @@ public class ArapRecBillImportServiceImpl implements IArapRecBillImportService {
 		}
 		
 		//单据表体
-		if(bill.containsKey("children") && bill.get("children") instanceof JSONArray) {
+		if(bill.containsKey("children") && bill.get("children") instanceof JSONArray && bill.getJSONArray("children").size() > 0) {
 			JSONArray children = bill.getJSONArray("children");
 			StringBuilder bodyErrMsg = new StringBuilder();
 			for(int i=0; i<children.size(); i++) {
@@ -146,9 +150,6 @@ public class ArapRecBillImportServiceImpl implements IArapRecBillImportService {
 			}
 		} else {
 			errMsg.append("单据表体不存在或非法；");
-		}
-		if(StringUtils.isNotBlank(errMsg.toString())) {
-			errMsg.insert(0, "单据" + TransUtils.getExBillNo(bill) + "格式错误：");
 		}
 		return errMsg.toString();
 	}

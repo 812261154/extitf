@@ -8,6 +8,7 @@ import nc.bs.arap.util.BillUtils;
 import nc.bs.arap.util.TransUtils;
 import nc.bs.framework.common.InvocationInfoProxy;
 import nc.bs.framework.common.NCLocator;
+import nc.bs.logging.Logger;
 import nc.itf.arap.supplier.IArapSupplierSynchService;
 import nc.itf.bd.supplier.baseinfo.ISupBaseInfoExtendService;
 import nc.ui.bd.pub.extend.PrivateServiceContext;
@@ -33,10 +34,10 @@ public class ArapSupplierSynchServiceImpl implements IArapSupplierSynchService {
 	private String defaultSupplierclass = "2";
 	
 	private String[] dateFields = { 
-			"操作类型", "公司", "编码", "名称" 
+			"操作类型", "公司", "编码", "名称", "外部来源系统"  
 	};
 	private String[] dateKeys = { 
-			"op_type", "pk_org", "code", "name"
+			"op_type", "pk_org", "code", "name", "def1"
 	};
 	
 	private String checkFieldExist(JSONObject bill) {
@@ -114,7 +115,13 @@ public class ArapSupplierSynchServiceImpl implements IArapSupplierSynchService {
 				vo.setCreationtime(new UFDateTime());
 				vo.setCreator(pk_user);
 				
+				String sql = "select count(*) from bd_supplier t where t.dr =0 and t.code = '" +jsonCust.getString("code")+ "' and t.pk_org in ('" +pk_group+ "', '" +pk_org+ "')";
+				if(importUtils.isBillExit(sql)) {
+					Logger.error("[SDPG][" + ArapSupplierSynchServiceImpl.class.getName() + "],供应商编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
+					throw new BusinessException("供应商编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
+				} 
 				service.insertSupplierWithExtendVO(vo, new HashMap<String, Object>(), new PrivateServiceContext(), false);
+				
 			} else if(StringUtils.equals(opType, "0")) {
 				//删除
 				SupplierVO vo = importUtils.getSupplierVOByCode(code, pk_group, pk_org);

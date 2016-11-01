@@ -4,9 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import nc.bs.arap.util.TransUtils;
+import nc.bs.arap.util.BillUtils;
 import nc.bs.arap.util.FileUtils;
 import nc.bs.arap.util.HttpUtils;
+import nc.bs.arap.util.TransUtils;
 import nc.bs.dao.BaseDAO;
 import nc.bs.dao.DAOException;
 import nc.bs.framework.common.NCLocator;
@@ -45,11 +46,13 @@ public class ArapPayBillImportBO {
 
 		List<JSONArray> list = FileUtils.deserializeFromFile(RuntimeEnv.getNCHome() + "/modules/arap/outterdata/ap");
 		AggPayableBillVO[] vos = arrayListToVos(list);
+		Logger.info("[SDPG][" + ArapPayBillImportBO.class.getName() + "],成功转换本地数据到VO" +vos.length+ "条。");
 		
 		//导入结果
 		JSONArray rtArray = new JSONArray();
 		String outterBillno = "";
 		IInsertPayableBill service = (IInsertPayableBill) NCLocator.getInstance().lookup(IInsertPayableBill.class.getName());
+		int successCount = 0;
 		for(AggPayableBillVO vo : vos) {
 			JSONObject rtJson = new JSONObject();
 			outterBillno = (String) vo.getParentVO().getAttributeValue("def1");
@@ -59,22 +62,28 @@ public class ArapPayBillImportBO {
 				if(isBillExit(vo)) {
 					rtJson.put("COMPLETED", "1");
 					rtJson.put("MESSAGE", "该单据已存在，不可重复录入!");
+					Logger.info("[SDPG][" + ArapPayBillImportBO.class.getName() + "],单据" +outterBillno+ "已存在，不可重复录入!");
 				} else {
 					String rt = service.insertPayableBill_RequiresNew(vo);
 					if(StringUtils.isBlank(rt)) {
 						rtJson.put("COMPLETED", "1");
 						rtJson.put("MESSAGE", "");
+						successCount++;
 					} else {
 						rtJson.put("COMPLETED", "0");
 						rtJson.put("MESSAGE", rt);
+						Logger.info("[SDPG][" + ArapPayBillImportBO.class.getName() + "],单据" +outterBillno+ "导入失败，问题原因：" + rt);
 					}
 				}
 			} catch(Exception e3) {
 				rtJson.put("COMPLETED", "0");
 				rtJson.put("MESSAGE", e3.getMessage());
+				Logger.info("[SDPG][" + ArapPayBillImportBO.class.getName() + "],单据" +outterBillno+ "导入失败，问题原因：" + e3.getMessage());
 			}
 			rtArray.add(rtJson);
 		}
+		
+		Logger.info("[SDPG][" + ArapPayBillImportBO.class.getName() + "],导入成功" +successCount+ "条。");
 		importUtils.insertImportResult(rtArray);
 		rtArray.clear();
 		try {
@@ -107,12 +116,13 @@ public class ArapPayBillImportBO {
 		List<AggPayableBillVO> voList = new ArrayList<AggPayableBillVO>();
 		JSONArray rtArray = new JSONArray();
 		for(JSONArray billsArray : arrayList) {
+			Logger.info("[SDPG][" + ArapPayBillImportBO.class.getName() + "],取本地文件数据" +billsArray.size()+ "条。");
 			//存放翻译成功的单据
 			String outterBillno = "";
 			JSONObject bill = null;
 			for(int i=0; i<billsArray.size(); i++) {
 				bill = billsArray.getJSONObject(i);
-				outterBillno = TransUtils.getExBillNo(bill);
+				outterBillno = BillUtils.getArapBillSourceNo(bill);
 				try {
 					AggPayableBillVO vo = jsonToVO(bill);
 					voList.add(vo);
@@ -126,12 +136,13 @@ public class ArapPayBillImportBO {
 					rtJson.put("COMPLETED", "0");
 					rtJson.put("MESSAGE", e3.getMessage());
 					rtArray.add(rtJson);
-					Logger.error("单据[" +outterBillno+ "]导入出错，问题原因：" + e3.getMessage() + "\n");
+					Logger.error("[SDPG][" + ArapPayBillImportBO.class.getName() + "],单据[" +outterBillno+ "]导入出错，问题原因：" + e3.getMessage());
 				}
 			}
 		}
 		if(rtArray.size() > 0) {
 			importUtils.insertImportResult(rtArray);
+			Logger.info("[SDPG][" + ArapPayBillImportBO.class.getName() + "],失败" +rtArray.size()+ "条。");
 		}
 		return (AggPayableBillVO[])voList.toArray(new AggPayableBillVO[0]);
 	}
@@ -275,7 +286,7 @@ public class ArapPayBillImportBO {
 			childVO.setLocal_money_bal(local_money_cr);
 			//贷方组织本币，实洋
 			childVO.setLocal_money_cr(local_money_cr);
-			//码洋
+			//组织本币码洋
 			childVO.setDef2(child.getString("def2"));
 			childVO.setLocal_money_de(UFDouble.ZERO_DBL);
 			childVO.setLocal_notax_cr(UFDouble.ZERO_DBL);

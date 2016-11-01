@@ -131,6 +131,9 @@ public class FileUtils {
 	 * @throws BusinessException 
 	 */
 	public static void serializeJSONArrayToFile(JSONArray array, String baseFilePath) throws BusinessException {
+		if(array == null || array.size() == 0) {
+			return;
+		}
 		ObjectOutputStream oo = null;
 		try {
 			IServerEnvironmentService service = NCLocator.getInstance().lookup(IServerEnvironmentService.class);

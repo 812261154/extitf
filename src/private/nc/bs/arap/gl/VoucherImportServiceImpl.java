@@ -3,7 +3,6 @@ package nc.bs.arap.gl;
 import nc.bs.arap.util.BillUtils;
 import nc.bs.arap.util.DateUtils;
 import nc.bs.arap.util.FileUtils;
-import nc.bs.arap.util.TransUtils;
 import nc.bs.logging.Logger;
 import nc.fi.arap.pubutil.RuntimeEnv;
 import nc.itf.arap.gl.IVoucherImportService;
@@ -33,28 +32,33 @@ public class VoucherImportServiceImpl implements IVoucherImportService {
 	public String voucherImport(String jsonVouchers) {
 		
 		JSONObject rt = new JSONObject();
-		rt.put("result", "success");
-		rt.put("message", "");
+		JSONArray rtArray = new JSONArray();
 		try {
 			JSONArray billsArray = JSONArray.fromObject(jsonVouchers);
-			StringBuffer errMsg = new StringBuffer();
+			Logger.info("[SDPG][" + VoucherImportServiceImpl.class.getName() + "],总共接受数据" +billsArray.size()+ "条。");
 			JSONObject bill = null;
 			for(int i=0; i<billsArray.size(); i++) {
 				bill = billsArray.getJSONObject(i);
-				errMsg.append(this.checkFieldExist(bill));
+				String checkRtMsg = this.checkFieldExist(bill);
+				if(StringUtils.isNotBlank(checkRtMsg)) {
+					billsArray.remove(i);					
+					JSONObject rtJson = new JSONObject();
+					rtJson.put("FROMSYS", BillUtils.getVoucherSourceSys(bill));
+					rtJson.put("NUMBER", BillUtils.getVoucherSourceNo(bill));
+					rtJson.put("COMPLETED", "0");
+					rtJson.put("MESSAGE", checkRtMsg);
+					rtArray.add(rtJson);
+					Logger.error("[SDPG][" + VoucherImportServiceImpl.class.getName() + "],单据" +BillUtils.getVoucherSourceNo(bill) + "接收失败，问题原因：" + checkRtMsg);
+				}
 			}
-			if(StringUtils.isBlank(errMsg.toString())) {
-				FileUtils.serializeJSONArrayToFile(billsArray, RuntimeEnv.getNCHome() + "/modules/arap/outterdata/gl/");
-			} else {
-				rt.put("result", "fail");
-				rt.put("message", "JSONArray字符串格式错误：" + errMsg.toString());
-				Logger.error("JSONArray字符串格式错误：" + errMsg.toString());
-			}
+			Logger.info("[SDPG][" + VoucherImportServiceImpl.class.getName() + "]," +billsArray.size()+ "条数据正在往本地缓存...");
+			FileUtils.serializeJSONArrayToFile(billsArray, RuntimeEnv.getNCHome() + "/modules/arap/outterdata/gl/");
+			Logger.info("[SDPG][" + VoucherImportServiceImpl.class.getName() + "],缓存成功" +billsArray.size()+ "条数据。");
 		} catch (Exception e) {
-			rt.put("result", "fail");
-			rt.put("message", "JSONArray字符串格式错误或实例化到本地失败:" + e.getMessage());
-			Logger.error("JSONArray字符串格式错误或实例化到本地失败:", e);
+			Logger.error("[SDPG][" + VoucherImportServiceImpl.class.getName() + "],JSONArray字符串格式错误或实例化到本地失败,原因:", e);
+			Logger.error("[SDPG][" + VoucherImportServiceImpl.class.getName() + "],缓存失败的JSONArray字符串：" + jsonVouchers);
 		}
+		rt.put("LST_MESSAGE", rtArray);
 		return rt.toString();
 	}
 	
@@ -87,7 +91,7 @@ public class VoucherImportServiceImpl implements IVoucherImportService {
 		}
 		
 		//凭证分录
-		if(voucher.containsKey("details") && voucher.get("details") instanceof JSONArray) {
+		if(voucher.containsKey("details") && voucher.get("details") instanceof JSONArray && voucher.getJSONArray("details").size() > 0) {
 			JSONArray details = voucher.getJSONArray("details");
 			StringBuilder detailErrMsg = new StringBuilder();
 			for(int i=0; i<details.size(); i++) {
@@ -100,7 +104,7 @@ public class VoucherImportServiceImpl implements IVoucherImportService {
 				for(int j=0; j<bodyDataKeys.length; j++) {
 					String key = bodyDataKeys[j];
 					if(StringUtils.equals(key, "ass")) {
-						if(!(child.containsKey(key) && child.get(key) instanceof JSONObject)) {
+						if(!(child.containsKey(key) && child.get(key) instanceof JSONArray)) {
 							detailBodyErrMsg.append("[" + bodyDataFields[j] + "]");
 							continue;
 						}
@@ -126,9 +130,9 @@ public class VoucherImportServiceImpl implements IVoucherImportService {
 		} else {
 			errMsg.append("分录不存在或非法；");
 		}
-		if(StringUtils.isNotBlank(errMsg.toString())) {
-			errMsg.insert(0, "单据[" + TransUtils.getVoucherBillNo(voucher) + "]对应的凭证格式错误;");
-		}
+		/*if(StringUtils.isNotBlank(errMsg.toString())) {
+			errMsg.insert(0, "单据[" + BillUtils.getVoucherSourceNo(voucher) + "]对应的凭证格式错误;");
+		}*/
 		return errMsg.toString();
 	}
 	

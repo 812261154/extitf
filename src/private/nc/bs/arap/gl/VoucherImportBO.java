@@ -5,17 +5,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
-import nc.bs.arap.util.TransUtils;
+import nc.bs.arap.util.BillUtils;
 import nc.bs.arap.util.DateUtils;
 import nc.bs.arap.util.FileUtils;
 import nc.bs.arap.util.HttpUtils;
+import nc.bs.arap.util.TransUtils;
 import nc.bs.framework.common.NCLocator;
-import nc.bs.gl.voucher.VoucherExtendDMO;
 import nc.bs.logging.Logger;
 import nc.fi.arap.pubutil.RuntimeEnv;
 import nc.itf.arap.gl.IInsertVoucher;
 import nc.itf.gl.pub.IFreevaluePub;
-import nc.itf.gl.voucher.IVoucherNo;
 import nc.vo.bd.accassitem.AccAssItemVO;
 import nc.vo.bd.accessor.IBDData;
 import nc.vo.bd.account.AccAssVO;
@@ -53,10 +52,12 @@ public class VoucherImportBO {
 		
 		List<JSONArray> list = FileUtils.deserializeFromFile(RuntimeEnv.getNCHome() + "/modules/arap/outterdata/gl");
 		VoucherVO[] vos = arrayListToVos(list);
+		Logger.info("[SDPG][" + VoucherImportBO.class.getName() + "],成功转换本地数据到VO" +vos.length+ "条。");
 		
 		//导入结果
 		JSONArray rtArray = new JSONArray();
 		IInsertVoucher service = NCLocator.getInstance().lookup(IInsertVoucher.class);
+		int successCount = 0;
 		for(VoucherVO vo : vos) {
 			JSONObject rtJson = new JSONObject();
 			rtJson.put("FROMSYS", vo.getFree3());
@@ -65,23 +66,28 @@ public class VoucherImportBO {
 				if(importUtils.isBillExit(getBillExitSql(vo))) {
 					rtJson.put("COMPLETED", "1");
 					rtJson.put("MESSAGE", "该单据已存在，不可重复录入!");
+					Logger.info("[SDPG][" + VoucherImportBO.class.getName() + "],单据" +vo.getFree4()+ "已存在，不可重复录入!");
 				} else {
 					String rt = service.insertVoucher_RequiresNew(vo);
 					if(StringUtils.isBlank(rt)) {
 						rtJson.put("COMPLETED", "1");
 						rtJson.put("MESSAGE", "");
+						successCount++;
 					} else {
 						rtJson.put("COMPLETED", "0");
 						rtJson.put("MESSAGE", rt);
+						Logger.info("[SDPG][" + VoucherImportBO.class.getName() + "],单据" +vo.getFree4()+ "导入失败，问题原因：" + rt);
 					}
 				}
 			} catch (Exception e) {
 				rtJson.put("COMPLETED", "0");
 				rtJson.put("MESSAGE", e.getMessage());
+				Logger.info("[SDPG][" + VoucherImportBO.class.getName() + "],单据" +vo.getFree4()+ "导入失败，问题原因：" + e.getMessage());
 			}
 			rtArray.add(rtJson);
 		}
 		
+		Logger.info("[SDPG][" + VoucherImportBO.class.getName() + "],导入成功" +successCount+ "条。");
 		importUtils.insertImportResult(rtArray);
 		rtArray.clear();
 		try {
@@ -101,12 +107,13 @@ public class VoucherImportBO {
 		List<VoucherVO> voList = new ArrayList<VoucherVO>();
 		JSONArray rtArray = new JSONArray();
 		for(JSONArray billsArray : arrayList) {
+			Logger.info("[SDPG][" + VoucherImportBO.class.getName() + "],取本地文件数据" +billsArray.size()+ "条。");
 			//存放翻译失败的单据
 			String outterBillno = "";
 			JSONObject bill = null;
 			for(int i=0; i<billsArray.size(); i++) {
 				bill = billsArray.getJSONObject(i);
-				outterBillno = TransUtils.getVoucherBillNo(bill);
+				outterBillno = BillUtils.getVoucherSourceNo(bill);
 				try {
 					VoucherVO vo = jsonToVO(bill);
 					voList.add(vo);
@@ -120,12 +127,13 @@ public class VoucherImportBO {
 					rtJson.put("COMPLETED", "0");
 					rtJson.put("MESSAGE", e3.getMessage());
 					rtArray.add(rtJson);
-					Logger.error("单据[" +outterBillno+ "]导入出错，问题原因：" + e3.getMessage() + "\n");
+					Logger.error("[SDPG][" + VoucherImportBO.class.getName() + "],单据[" +outterBillno+ "]导入出错，问题原因：" + e3.getMessage());
 				}
 			}
 		}
 		if(rtArray.size() > 0) {
 			importUtils.insertImportResult(rtArray);
+			Logger.info("[SDPG][" + VoucherImportBO.class.getName() + "],失败" +rtArray.size()+ "条。");
 		}
 		return (VoucherVO[])voList.toArray(new VoucherVO[0]);
 	}
@@ -197,7 +205,7 @@ public class VoucherImportBO {
 			dvo.setPk_vouchertype(voucherTypeVO.getPk_vouchertype());
 			dvo.setPrepareddate(new UFDate(prepareddate));
 			dvo.setStatus(0);
-			dvo.setAss(getAssVO(accountVO.getAccass(), detailJson.getJSONObject("ass"), pk_group, orgVO.getPk_org()));
+			dvo.setAss(getAssVO(accountVO.getAccass(), detailJson.getJSONArray("ass"), pk_group, orgVO.getPk_org()));
 			if(detailJson.getInt("direction") == 0) {
 				dvo.setDebitamount(amount);
 				dvo.setLocaldebitamount(amount);
@@ -219,15 +227,22 @@ public class VoucherImportBO {
 		return vo;
 	} 
 	
-	private AssVO[] getAssVO(AccAssVO[] accAssVOs, JSONObject ass, String pk_group, String pk_org) throws BusinessException {
+	private AssVO[] getAssVO(AccAssVO[] accAssVOs, JSONArray ass, String pk_group, String pk_org) throws BusinessException {
 		AssVO[] assVOs = new AssVO[accAssVOs.length];
 		for(int i=0; i<accAssVOs.length; i++) {
 			assVOs[i] = new AssVO();
 			assVOs[i].setUserData(true);
 			assVOs[i].setPk_Checktype(accAssVOs[i].getPk_entity());
 			AccAssItemVO accAssItemVO = importUtils.getAccassItemVO(accAssVOs[i].getPk_entity());
-			IBDData ibdata = importUtils.getDocByCode(accAssItemVO.getClassid(), pk_group, pk_org, ass.getString(accAssItemVO.getCode()));
-			assVOs[i].setPk_Checkvalue(ibdata.getPk());
+			for(int j=0; j<ass.size(); j++) {
+				JSONObject tempJson = ass.getJSONObject(j);
+				if(StringUtils.equalsIgnoreCase(accAssItemVO.getCode(), tempJson.getString("checktype"))) {
+					IBDData ibdata = importUtils.getDocByCode(accAssItemVO.getClassid(), pk_group, pk_org, tempJson.getString("checkvalue"));
+					assVOs[i].setPk_Checkvalue(ibdata.getPk());
+					break;
+				}
+			}
+			
 		}
 		return assVOs;
 	}

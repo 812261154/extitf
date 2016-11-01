@@ -4,7 +4,7 @@ import java.net.NetworkInterface;
 import java.util.Enumeration;
 import java.util.UUID;
 
-import nc.bs.pub.DataManageObject;
+import net.sf.json.JSONObject;
 
 import org.apache.commons.lang.StringUtils;
 
@@ -100,6 +100,42 @@ public class BillUtils {
   	   } catch (NumberFormatException e) {
   	    return false;
   	   }
+  	}
+  	
+  	//取应收应付单里的外系统单据号
+  	public static String getArapBillSourceNo(JSONObject  bill) {
+  		try {
+  			return bill.getJSONObject("parent").getString("def1");
+  		} catch(Exception e) {
+  			return "[未知单据号]";
+  		}
+  	}
+  	
+  	//取应收应付单里的来源系统
+  	public static String getArapBillSourceSys(JSONObject  bill) {
+  		try {
+  			return bill.getJSONObject("parent").getString("def4");
+  		} catch(Exception e) {
+  			return "[未知来源系统]";
+  		}
+  	}
+  	
+  	//取凭证里的单据号
+  	public static String getVoucherSourceNo(JSONObject  voucher) {
+  		try {
+  			return voucher.getString("free4");
+  		} catch(Exception e) {
+  			return "[未知来源单据号]";
+  		}
+  	}
+  	
+  	//取凭证里的来源系统
+  	public static String getVoucherSourceSys (JSONObject  voucher) {
+  		try {
+  			return voucher.getString("free3");
+  		} catch(Exception e) {
+  			return "[未知来源系统]";
+  		}
   	}
   	
 }

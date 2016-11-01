@@ -220,7 +220,7 @@ public class InsertReceiveBillImpl implements IInsertReceiveBill {
 			payChildVO.setLocal_money_bal(recChildVO.getLocal_money_bal());
 			//贷方组织本币，实洋
 			payChildVO.setLocal_money_cr(recChildVO.getLocal_money_de());
-			//码洋
+			//本币码洋
 			payChildVO.setDef2(recChildVO.getDef2());
 			payChildVO.setLocal_money_de(UFDouble.ZERO_DBL);
 			payChildVO.setLocal_notax_cr(UFDouble.ZERO_DBL);
@@ -233,7 +233,7 @@ public class InsertReceiveBillImpl implements IInsertReceiveBill {
 			payChildVO.setMoney_bal(recChildVO.getMoney_bal());	
 			//贷方原币，实洋
 			payChildVO.setMoney_cr(recChildVO.getMoney_de());
-			//码洋
+			//原币码洋
 			payChildVO.setDef1(recChildVO.getDef1());
 			payChildVO.setMoney_de(UFDouble.ZERO_DBL);	
 			//物料
