@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.commons.lang3.StringUtils;
+
 import nc.bs.framework.common.NCLocator;
 import nc.login.bs.IServerEnvironmentService;
 import nc.vo.pub.BusinessException;
@@ -160,12 +162,22 @@ public class FileUtils {
 	
 	//取配置文件中的参数
 	public static String getProperties(String filenpath, String key) throws BusinessException {
+		try {
+			Properties p = getProperties(filenpath);
+			return p.getProperty(key);
+		} catch (Exception e) {
+			throw new BusinessException("配置文件读取出错！");
+		}
+	}
+	
+	//取配置文件中的参数
+	public static Properties getProperties(String filenpath) throws BusinessException {
 		FileInputStream in = null;
 		try {
-			in = new FileInputStream(TransUtils.class.getClassLoader().getResource(filenpath).getPath());
+			in = new FileInputStream(BillUtils.class.getClassLoader().getResource(filenpath).getPath());
 			Properties p = new Properties();
 			p.load(in);
-			return p.getProperty(key);
+			return p;
 		} catch (Exception e) {
 			throw new BusinessException("配置文件读取出错！");
 		} finally {
@@ -176,5 +188,16 @@ public class FileUtils {
 				}
 			}
 		}
+	}
+	
+	public static String getEStoreDeptCode(String orgCode) throws BusinessException {
+		String[] eOrg = getProperties("nc/bs/arap/properties/ArapWsPrams.properties", "EOrg").split(",");
+		String[] eStoreDept = getProperties("nc/bs/arap/properties/ArapWsPrams.properties", "EStoreDept").split(",");
+		for(int i=0; i<eOrg.length; i++) {
+			if(StringUtils.equals(orgCode, eOrg[i])) {
+				return eStoreDept[i];
+			}
+		}
+		throw new BusinessException("未找到业务单元[" +orgCode+ "]对应的电商仓虚拟部门！");
 	}
 }

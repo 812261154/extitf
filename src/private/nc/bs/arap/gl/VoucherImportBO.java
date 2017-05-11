@@ -2,14 +2,13 @@ package nc.bs.arap.gl;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Properties;
 import java.util.Vector;
 
 import nc.bs.arap.util.BillUtils;
 import nc.bs.arap.util.DateUtils;
 import nc.bs.arap.util.FileUtils;
 import nc.bs.arap.util.HttpUtils;
-import nc.bs.arap.util.TransUtils;
 import nc.bs.framework.common.NCLocator;
 import nc.bs.logging.Logger;
 import nc.fi.arap.pubutil.RuntimeEnv;
@@ -41,14 +40,14 @@ import org.apache.commons.lang3.StringUtils;
 
 public class VoucherImportBO {
 	
-	private TransUtils importUtils = new TransUtils();
+	private BillUtils importUtils = new BillUtils();
 	private String defaultGroup = "1";
 	private String defaultUser = "group1";
 	
 	public void voucherImort() throws BusinessException {
-		Map<String, String> defaultParam = importUtils.getDefaultParam("gl");
-		defaultGroup = defaultParam.get("default_group");
-		defaultUser = defaultParam.get("default_user");
+		Properties p = FileUtils.getProperties("nc/bs/arap/properties/ArapWsPrams.properties");
+		defaultGroup = p.getProperty("defaultGroup");
+		defaultUser = p.getProperty("defaultUser");
 		
 		List<JSONArray> list = FileUtils.deserializeFromFile(RuntimeEnv.getNCHome() + "/modules/arap/outterdata/gl");
 		VoucherVO[] vos = arrayListToVos(list);
@@ -91,7 +90,7 @@ public class VoucherImportBO {
 		importUtils.insertImportResult(rtArray);
 		rtArray.clear();
 		try {
-			rtArray = TransUtils.queryImportResult();
+			rtArray = BillUtils.queryImportResult();
 			if(rtArray.size() > 0) {
 				String rt = HttpUtils.httpPostWithJSON(rtArray);
 				if(rt.trim().startsWith("FAIL")) {

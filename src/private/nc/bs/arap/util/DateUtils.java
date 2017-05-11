@@ -44,8 +44,24 @@ public class DateUtils {
 	}  
 	
 	//判断字符串是否是标准的日期格式
-	public static boolean isFormatDateString(String str) {
+	public static boolean isFormatDateTimeString(String str) {
 		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+		boolean isLegal = false;
+		if(StringUtils.isNotEmpty(str)) {
+			try {
+				sdf.setLenient(false);
+				sdf.parse(str);
+				isLegal = true;
+			} catch (ParseException e) {
+				isLegal = false;
+			}
+		}
+		return isLegal;
+	}
+	
+	//判断字符串是否是标准的日期格式
+	public static boolean isFormatDateString(String str) {
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 		boolean isLegal = false;
 		if(StringUtils.isNotEmpty(str)) {
 			try {

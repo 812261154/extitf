@@ -2,12 +2,11 @@ package nc.impl.arap.pay;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Properties;
 
 import nc.bs.arap.util.BillUtils;
 import nc.bs.arap.util.FileUtils;
 import nc.bs.arap.util.HttpUtils;
-import nc.bs.arap.util.TransUtils;
 import nc.bs.dao.BaseDAO;
 import nc.bs.dao.DAOException;
 import nc.bs.framework.common.NCLocator;
@@ -19,6 +18,7 @@ import nc.vo.arap.payable.AggPayableBillVO;
 import nc.vo.arap.payable.PayableBillItemVO;
 import nc.vo.arap.payable.PayableBillVO;
 import nc.vo.bd.supplier.SupplierVO;
+import nc.vo.org.DeptVO;
 import nc.vo.pub.BusinessException;
 import nc.vo.pub.lang.UFBoolean;
 import nc.vo.pub.lang.UFDate;
@@ -31,18 +31,18 @@ import org.apache.commons.lang3.StringUtils;
 
 public class ArapPayBillImportBO {
 	
-	private TransUtils importUtils = new TransUtils();
+	private BillUtils importUtils = new BillUtils();
 	private String defaultGroup = "1";
 	private String defaultUser = "3";
 	private String defaultTradeType = "D1";
 	private String defaultBillType = "F1";
 	
 	public void payBillImport() throws BusinessException {
-		Map<String, String> defaultParam = importUtils.getDefaultParam("ap");
-		defaultGroup = defaultParam.get("default_group");
-		defaultUser = defaultParam.get("default_user");
-		defaultTradeType = defaultParam.get("default_tradetype");
-		defaultBillType = defaultParam.get("default_billtype");
+		Properties p = FileUtils.getProperties("nc/bs/arap/properties/ArapWsPrams.properties");
+		defaultGroup = p.getProperty("defaultGroup");
+		defaultUser = p.getProperty("defaultUser");
+		defaultTradeType = p.getProperty("defaultPayTradetype");
+		defaultBillType = p.getProperty("defaultPayBilltype");
 
 		List<JSONArray> list = FileUtils.deserializeFromFile(RuntimeEnv.getNCHome() + "/modules/arap/outterdata/ap");
 		AggPayableBillVO[] vos = arrayListToVos(list);
@@ -87,7 +87,7 @@ public class ArapPayBillImportBO {
 		importUtils.insertImportResult(rtArray);
 		rtArray.clear();
 		try {
-			rtArray = TransUtils.queryImportResult();
+			rtArray = BillUtils.queryImportResult();
 			if(rtArray.size() > 0) {
 				String rt = HttpUtils.httpPostWithJSON(rtArray);
 				if(rt.trim().startsWith("FAIL")) {
@@ -166,6 +166,7 @@ public class ArapPayBillImportBO {
 		String scomment = parent.getString("scomment");
 		String outterSysNum = parent.getString("def1");
 		String outterSys = parent.getString("def4");
+		DeptVO deptVO = importUtils.getDeptVOByCode(pk_group, pk_org, parent.getString("def7"));
 		String supplier = "";
 		UFDouble rate = null;
 		
@@ -174,8 +175,7 @@ public class ArapPayBillImportBO {
 		parentVO.setBillstatus(-1);		//单据状态:1=审批通过，-1=保存
 		parentVO.setEffectstatus(0);  	//生效状态：10=已生效，0=未生效
 		
-		//外系统单据号
-		parentVO.setDef1(outterSysNum);
+		
 		parentVO.setBillclass("yf");
 		parentVO.setBilldate(billdate);
 		parentVO.setBillmaker(pk_user);
@@ -194,14 +194,10 @@ public class ArapPayBillImportBO {
 		parentVO.setIsreded(UFBoolean.FALSE);
 		//本币实洋
 		parentVO.setLocal_money(new UFDouble(parent.getDouble("local_money")));
-		//本币码洋
-		parentVO.setDef2(parent.getString("def2"));
 		//?
 		parentVO.setM_cooperateMoreTimes(UFBoolean.TRUE);	
 		//原币实洋
 		parentVO.setMoney(new UFDouble(parent.getDouble("money")));	
-		//原币码洋
-		parentVO.setDef3(parent.getString("def3"));
 		//往来对象：0，客户
 		parentVO.setObjtype(0);	
 		//单据类型编码
@@ -213,10 +209,10 @@ public class ArapPayBillImportBO {
 		parentVO.setPk_group(pk_group);
 		//财务组织
 		parentVO.setPk_org(pk_org);	
-		//仓号
-		parentVO.setDef6(parent.getString("def6"));
 		parentVO.setPk_tradetype(defaultTradeType);	//应收类型code
 		parentVO.setPk_tradetypeid(pk_tradetypeid);
+		parentVO.setPk_deptid(deptVO.getPk_dept());
+		parentVO.setPk_deptid_v(deptVO.getPk_vid());
 		//摘要
 		parentVO.setScomment(scomment);	
 		//收货国
@@ -225,10 +221,15 @@ public class ArapPayBillImportBO {
 		//报税国
 		parentVO.setTaxcountryid(rececountryid);
 		parentVO.setSyscode(1);	//0=应收系统，1=应付系统
-		//来源系统
-		parentVO.setDef4(outterSys);
-		//对应红冲单据号
-		parentVO.setDef5(parent.getString("def5"));
+		parentVO.setDef1(outterSysNum);				//外系统单据号
+		parentVO.setDef2(parent.getString("def2"));	//本币码洋
+		parentVO.setDef3(parent.getString("def3"));	//原币码洋
+		parentVO.setDef4(outterSys);				//来源系统
+		parentVO.setDef5(parent.getString("def5"));	//对应红冲单据号
+		parentVO.setDef6(parent.getString("def6"));	//仓号
+		parentVO.setDef7(parent.getString("def7"));	//仓号对应虚拟部门
+		parentVO.setDef8(parent.getString("def8"));	//供应商发货单号
+		parentVO.setDef14(StringUtils.equalsIgnoreCase(bill.getString("needarap"), "Y") ? "Y" : "N");
 		
 		/**  --表体--  **/
 		JSONArray children = bill.getJSONArray("children");
@@ -239,9 +240,7 @@ public class ArapPayBillImportBO {
 			JSONObject child = children.getJSONObject(i);
 			UFDouble money_cr = new UFDouble(child.getString("money_cr"));
 			UFDouble local_money_cr = new UFDouble(child.getString("local_money_cr"));
-			SupplierVO supplierVO = importUtils.getSupplierPkByCode(outterSys, child.getString("supplier"), pk_group, pk_org);
-			//发货国
-			//String sendcountryid = importUtils.getCountryBySupplierID(pk_supplier);
+			SupplierVO supplierVO = importUtils.getSupplierVOByCode(outterSys, child.getString("supplier"), pk_group, pk_org);
 			String pk_material = importUtils.getMaterialPkByCode(child.getString("material"), pk_group, pk_org);
 			String taxcodeid = importUtils.getTaxcodePkByCode(supplierVO.getPk_country(), child.getString("material"));
 			UFDouble childRate = new UFDouble(child.getString("rate"));
@@ -286,8 +285,6 @@ public class ArapPayBillImportBO {
 			childVO.setLocal_money_bal(local_money_cr);
 			//贷方组织本币，实洋
 			childVO.setLocal_money_cr(local_money_cr);
-			//组织本币码洋
-			childVO.setDef2(child.getString("def2"));
 			childVO.setLocal_money_de(UFDouble.ZERO_DBL);
 			childVO.setLocal_notax_cr(UFDouble.ZERO_DBL);
 			childVO.setLocal_notax_de(UFDouble.ZERO_DBL);
@@ -299,8 +296,6 @@ public class ArapPayBillImportBO {
 			childVO.setMoney_bal(money_cr);	
 			//贷方原币，实洋
 			childVO.setMoney_cr(money_cr);
-			//码洋
-			childVO.setDef1(child.getString("def1"));
 			childVO.setMoney_de(UFDouble.ZERO_DBL);	
 			//物料
 			childVO.setMaterial(pk_material);
@@ -321,6 +316,8 @@ public class ArapPayBillImportBO {
 			childVO.setPk_org(pk_org);
 			childVO.setPk_tradetype(defaultTradeType);
 			childVO.setPk_tradetypeid(pk_tradetypeid);
+			childVO.setPk_deptid(deptVO.getPk_dept());
+			childVO.setPk_deptid_v(deptVO.getPk_vid());
 			childVO.setPrepay(0);
 			childVO.setQuantity_bal(UFDouble.ZERO_DBL);
 			childVO.setRate(childRate);
@@ -337,6 +334,10 @@ public class ArapPayBillImportBO {
 			//扣税类别：0=应税内含，1=应税外加
 			childVO.setTaxtype(0);	
 			childVO.setTriatradeflag(UFBoolean.FALSE);	//	三级贸易
+			childVO.setDef1(child.getString("def1"));	//原币码洋
+			childVO.setDef2(child.getString("def2"));	//组织本币码洋
+			childVO.setDef3(child.getString("def3"));	//供应商对应仓号
+			childVO.setDef4(child.getString("def4"));	//仓号对应部门
 			
 			childrenVO[i] = childVO;
 		}

@@ -2,10 +2,10 @@ package nc.impl.arap.customer;
 
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Properties;
 
 import nc.bs.arap.util.BillUtils;
-import nc.bs.arap.util.TransUtils;
+import nc.bs.arap.util.FileUtils;
 import nc.bs.framework.common.InvocationInfoProxy;
 import nc.bs.framework.common.NCLocator;
 import nc.bs.logging.Logger;
@@ -28,12 +28,7 @@ import org.apache.commons.lang.StringUtils;
 
 public class ArapCustomerSynchServiceImpl implements IArapCustomerSynchService {
 	
-	private TransUtils importUtils = new TransUtils();
-	private String defaultGroup = "1";
-	private String defaultUser = "2";
-	private String defaultCountry = "CN";
-	private String defaultCurrtype = "CNY";
-	private String defaultCustclass = "02";
+	private BillUtils importUtils = new BillUtils();
 
 	private String[] dateFields = { 
 			"操作类型", "公司", "编码", "名称", "外部来源系统" 
@@ -65,10 +60,6 @@ public class ArapCustomerSynchServiceImpl implements IArapCustomerSynchService {
 		rt.put("result", "success");
 		rt.put("message", "");
 		try {
-			Map<String, String> defaultParam = importUtils.getDefaultParam("cust");
-			defaultGroup = defaultParam.get("default_group");
-			defaultUser = defaultParam.get("default_user");
-			defaultCustclass = defaultParam.get("default_custclass");
 			
 			JSONObject jsonCust = JSONObject.fromObject(jsonStrCust);
 			String errMsg = this.checkFieldExist(jsonCust);
@@ -76,8 +67,21 @@ public class ArapCustomerSynchServiceImpl implements IArapCustomerSynchService {
 				throw new BusinessException(errMsg);
 			}
 			
+			String sourceSys = jsonCust.getString("def1");
+			Properties p = FileUtils.getProperties("nc/bs/arap/properties/ArapWsPrams.properties");
+			String defaultGroup = p.getProperty("defaultGroup");
+			String defaultUser = p.getProperty("defaultUser");
+			String defaultCustclass = p.getProperty(sourceSys + "CustSupplierClass");
+			String defaultCountry = p.getProperty("defaultCountry");
+			String defaultCurrtype = p.getProperty("defaultCurrtype");
+			
 			String pk_group = importUtils.getCurrGroupPk(defaultGroup);
-			String pk_org = importUtils.getOrgByCode(pk_group, jsonCust.getString("pk_org")).getPrimaryKey();
+			
+			//如果pk_org=1，则表示集团级的客户,否则是业务单元级的
+			String pk_org = pk_group;
+			if(!StringUtils.equals(jsonCust.getString("pk_org"), defaultGroup)) {
+				pk_org = importUtils.getOrgByCode(pk_group, jsonCust.getString("pk_org")).getPrimaryKey();
+			}
 			CountryZoneVO countryZone = importUtils.getCountryZoneFormatPkByCode(defaultCountry);
 			String pk_user = importUtils.getInitUserPkByCode(defaultUser);
 			InvocationInfoProxy.getInstance().setGroupId(pk_group);
@@ -95,7 +99,7 @@ public class ArapCustomerSynchServiceImpl implements IArapCustomerSynchService {
 				vo.setCuststate(1);
 				vo.setCusttaxtypes(new CustCountrytaxesVO[] {});
 				vo.setDataoriginflag(0);
-				vo.setDef1(jsonCust.getString("def1"));
+				vo.setDef1(sourceSys);
 				vo.setDef2(jsonCust.getString("code"));
 				vo.setDr(0);
 				vo.setEnablestate(2);
@@ -115,11 +119,11 @@ public class ArapCustomerSynchServiceImpl implements IArapCustomerSynchService {
 				vo.setPk_timezone(countryZone.getPk_timezone());
 				vo.setStatus(2);
 				
-				String sql = "select count(*) from bd_customer t where t.dr =0 and t.code = '" +jsonCust.getString("code")+ "' and t.pk_org in ('" +pk_group+ "', '" +pk_org+ "')";
-				if(importUtils.isBillExit(sql)) {
-					Logger.error("[SDPG][" + ArapCustomerSynchServiceImpl.class.getName() + "],客户编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
-					throw new BusinessException("客户编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
-				} 
+//				String sql = "select count(*) from bd_customer t where t.dr =0 and t.code = '" +jsonCust.getString("code")+ "' and t.pk_org in ('" +pk_group+ "', '" +pk_org+ "')";
+//				if(importUtils.isBillExit(sql)) {
+//					Logger.error("[SDPG][" + ArapCustomerSynchServiceImpl.class.getName() + "],客户编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
+//					throw new BusinessException("客户编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
+//				} 
 				service.insertCustomerWithExtendVO(vo, new HashMap<String, Object>(), new PrivateServiceContext(), false);
 				
 			} else if(StringUtils.equals(opType, "0")) {

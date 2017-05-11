@@ -1,7 +1,5 @@
 package nc.bs.arap.plugin;
 
-import org.apache.commons.lang3.StringUtils;
-
 import nc.bs.arap.gl.VoucherImportBO;
 import nc.bs.pub.pa.PreAlertObject;
 import nc.bs.pub.pa.PreAlertReturnType;
@@ -10,6 +8,8 @@ import nc.bs.pub.taskcenter.IBackgroundWorkPlugin;
 import nc.impl.arap.pay.ArapPayBillImportBO;
 import nc.impl.arap.receivable.ArapRecBillImportBO;
 import nc.vo.pub.BusinessException;
+
+import org.apache.commons.lang3.StringUtils;
 
 public class ArapBillInsertPlugin implements IBackgroundWorkPlugin {
 

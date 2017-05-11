@@ -1,10 +1,13 @@
 package nc.impl.arap.receivable;
 
+import java.util.List;
+
 import nc.bs.arap.util.BillUtils;
-import nc.bs.arap.util.DateUtils;
 import nc.bs.arap.util.FileUtils;
 import nc.bs.logging.Logger;
 import nc.fi.arap.pubutil.RuntimeEnv;
+import nc.itf.arap.parm.ImportBillAggVO;
+import nc.itf.arap.parm.ImportFeildVO;
 import nc.itf.arap.receivable.IArapRecBillImportService;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
@@ -12,26 +15,6 @@ import net.sf.json.JSONObject;
 import org.apache.commons.lang.StringUtils;
 
 public class ArapRecBillImportServiceImpl implements IArapRecBillImportService {
-	
-	private String[] headDateFields = { 
-			"外系统单据号", "单据日期", "单据会计期间", "单据会计年度", "组织本币金额（实洋）", "组织本币金额（码洋）", 
-			"原币金额（实洋）", "原币金额（码洋）", "币种", "应收财务组织", "摘要", "外系统", "对应红冲单据号", "仓号对应部门", "仓号" 
-	};
-	
-	private String[] headDateKeys = { 
-			"def1", "billdate", "billyear", "billperiod", "local_money", "def2", 
-			"money", "def3", "pk_currtype", "pk_org", "scomment", "def4", "def5", "def6", "def7"
-	};
-	
-	private String[] bodyDataFields = {
-			"物料", "往来对象", "客户", "币种", "组织本币汇率", "借方原币金额（实洋）", "借方原币金额（码洋）", 
-			"组织本币金额（实洋）", "组织本币金额（码洋）", "税率", "扣税类别"
-	};
-	
-	private String[] bodyDataKeys = {
-			"material", "objtype", "customer", "pk_currtype", "rate", "money_de", "def1", 
-			"local_money_de", "def2", "taxrate", "taxtype"
-	};
 	
 	@Override
 	public String arRecBillImport(String jsonStrBills) {
@@ -73,39 +56,27 @@ public class ArapRecBillImportServiceImpl implements IArapRecBillImportService {
 			errMsg.append("“是否传应付”标志不存在；");
 		}
 		
+		ImportBillAggVO aggvo = this.getImportBillAggVO(BillUtils.getSourceSysFromJson(bill));
+		
 		//单据表头
 		if(bill.containsKey("parent") && bill.get("parent") instanceof JSONObject) {
 			JSONObject parent = bill.getJSONObject("parent");
 			StringBuilder headErrMsg = new StringBuilder();
-			for(int i=0; i<headDateKeys.length; i++) {
-				String key = headDateKeys[i];
-				//对应红冲单据号可为空
-				if(StringUtils.equals(key, "def5") || StringUtils.equals(key, "scomment")) {
-					if(!(parent.containsKey(key) && parent.get(key) instanceof String)) {
-						headErrMsg.append("[" + headDateFields[i] + "]");
-						continue;
-					}
-				} else if(!(parent.containsKey(key) && parent.get(key) instanceof String 
-						&& StringUtils.isNotEmpty(parent.getString(key)))) {
-					headErrMsg.append("[" + headDateFields[i] + "]");
-					continue;
+			List<ImportFeildVO> headFields = aggvo.getHeadFields();
+			for(ImportFeildVO field : headFields) {
+				boolean isLegal = true;
+				String key = field.getCode();
+				if(parent.containsKey(key) && parent.get(key) instanceof String) {
+					isLegal = BillUtils.isFieldLegal(field, parent.getString(key));
+				} else {
+					isLegal = false;
 				}
-				//单据日期必须是日期型字符串
-				if(StringUtils.equals(key, "billdate") && !DateUtils.isFormatDateString(parent.getString(key))) {
-					headErrMsg.append("[" + headDateFields[i] + "]");
-					continue;
+				//业务来源系统校验
+				if(isLegal && StringUtils.equals(key, "def4") && !BillUtils.isSourceSysLegal(parent.getString(key))) {
+					isLegal = false;
 				}
-				//金额必须是数字型字符串
-				if((StringUtils.equals(key, "local_money") || StringUtils.equals(key, "def2") || StringUtils.equals(key, "money") || StringUtils.equals(key, "def3"))
-						&& !BillUtils.isNumberic(parent.getString(key))) {
-					headErrMsg.append("[" + headDateFields[i] + "]");
-					continue;
-				}
-				//外部来源系统校验
-				if((StringUtils.equals(key, "def4"))
-						&& !BillUtils.isSysNameLegal(parent.getString(key))) {
-					headErrMsg.append("[" + headDateFields[i] + "]");
-					continue;
+				if(!isLegal) {
+					headErrMsg.append("[" + field.getName() + "]");
 				}
 			}
 			if(StringUtils.isNotBlank(headErrMsg.toString())) {
@@ -126,19 +97,17 @@ public class ArapRecBillImportServiceImpl implements IArapRecBillImportService {
 				}
 				JSONObject child = children.getJSONObject(i);
 				StringBuilder bodyChildErrMsg = new StringBuilder();
-				for(int j=0; j<bodyDataKeys.length; j++) {
-					String key = bodyDataKeys[j];
-					if(!(child.containsKey(key) && child.get(key) instanceof String 
-							&& StringUtils.isNotEmpty(child.getString(key)))) {
-						bodyChildErrMsg.append("[" + bodyDataFields[j] + "]");
-						continue;
+				List<ImportFeildVO> bodyFields = aggvo.getBodyFields();
+				for(ImportFeildVO field : bodyFields) {
+					boolean isLegal = true;
+					String key = field.getCode();
+					if(child.containsKey(key) && child.get(key) instanceof String) {
+						isLegal = BillUtils.isFieldLegal(field, child.getString(key));
+					} else {
+						isLegal = false;
 					}
-					//金额必须是数字型字符串
-					if((StringUtils.equals(key, "money_de") || StringUtils.equals(key, "def1") || StringUtils.equals(key, "local_money_de") 
-							|| StringUtils.equals(key, "def2") || StringUtils.equals(key, "rate") || StringUtils.equals(key, "taxrate"))
-							&& !BillUtils.isNumberic(child.getString(key))) {
-						bodyChildErrMsg.append("[" + bodyDataFields[j] + "]");
-						continue;
+					if(!isLegal) {
+						bodyChildErrMsg.append("[" + field.getName() + "]");
 					}
 				}
 				if(StringUtils.isNotBlank(bodyChildErrMsg.toString())) {
@@ -152,6 +121,65 @@ public class ArapRecBillImportServiceImpl implements IArapRecBillImportService {
 			errMsg.append("单据表体不存在或非法；");
 		}
 		return errMsg.toString();
+	}
+	
+	private ImportBillAggVO getImportBillAggVO(String type) {
+		ImportBillAggVO aggvo = new ImportBillAggVO();
+		
+		//资产租赁单独使用一套规则
+		if(StringUtils.equals(type, "ZCZL")) {
+			aggvo.addHeadField(new ImportFeildVO("billdate", "单据日期", false, ImportFeildVO.DATETIME));
+			aggvo.addHeadField(new ImportFeildVO("local_money", "组织本币金额", false, ImportFeildVO.NUMBER));
+			aggvo.addHeadField(new ImportFeildVO("money", "原币金额", false, ImportFeildVO.NUMBER));
+			aggvo.addHeadField(new ImportFeildVO("pk_currtype", "币种", false, ImportFeildVO.VARCHAR));
+			aggvo.addHeadField(new ImportFeildVO("pk_org", "应收财务组织", false, ImportFeildVO.VARCHAR));
+//			aggvo.addHeadField(new ImportFeildVO("scomment", "摘要", true, ImportFeildVO.VARCHAR));
+			aggvo.addHeadField(new ImportFeildVO("def1", "来源单据号", false, ImportFeildVO.VARCHAR));
+			aggvo.addHeadField(new ImportFeildVO("def4", "来源业务系统", false, ImportFeildVO.VARCHAR));
+			aggvo.addHeadField(new ImportFeildVO("def7", "仓号对应虚拟部门", false, ImportFeildVO.VARCHAR));
+			
+			aggvo.addBodyFields(new ImportFeildVO("objtype", "往来对象", false, ImportFeildVO.VARCHAR));
+			aggvo.addBodyFields(new ImportFeildVO("customer", "客户", false, ImportFeildVO.VARCHAR));
+			aggvo.addBodyFields(new ImportFeildVO("pk_currtype", "币种", false, ImportFeildVO.VARCHAR));
+			aggvo.addBodyFields(new ImportFeildVO("rate", "组织本币汇率", false, ImportFeildVO.NUMBER));
+			aggvo.addBodyFields(new ImportFeildVO("money_de", "借方原币金额", false, ImportFeildVO.NUMBER));
+			aggvo.addBodyFields(new ImportFeildVO("local_money_de", "组织本币金额", false, ImportFeildVO.NUMBER));
+			aggvo.addBodyFields(new ImportFeildVO("taxrate", "税率", false, ImportFeildVO.NUMBER));
+			aggvo.addBodyFields(new ImportFeildVO("taxtype", "扣税类别", false, ImportFeildVO.VARCHAR));
+			aggvo.addBodyFields(new ImportFeildVO("pk_subjcode", "收支项目", false, ImportFeildVO.VARCHAR));
+//			aggvo.addBodyFields(new ImportFeildVO("def10", "结算单号", false, ImportFeildVO.VARCHAR));
+			aggvo.addBodyFields(new ImportFeildVO("scomment", "摘要", true, ImportFeildVO.VARCHAR));
+		
+		} else {
+			aggvo.addHeadField(new ImportFeildVO("billdate", "单据日期", false, ImportFeildVO.DATETIME));
+			aggvo.addHeadField(new ImportFeildVO("local_money", "组织本币金额（实洋）", false, ImportFeildVO.NUMBER));
+			aggvo.addHeadField(new ImportFeildVO("def2", "组织本币金额（码洋）", false, ImportFeildVO.NUMBER));
+			aggvo.addHeadField(new ImportFeildVO("money", "原币金额（实洋）", false, ImportFeildVO.NUMBER));
+			aggvo.addHeadField(new ImportFeildVO("def3", "原币金额（码洋）", false, ImportFeildVO.NUMBER));
+			aggvo.addHeadField(new ImportFeildVO("pk_currtype", "币种", false, ImportFeildVO.VARCHAR));
+			aggvo.addHeadField(new ImportFeildVO("pk_org", "应收财务组织", false, ImportFeildVO.VARCHAR));
+			aggvo.addHeadField(new ImportFeildVO("scomment", "摘要", true, ImportFeildVO.VARCHAR));
+			aggvo.addHeadField(new ImportFeildVO("def4", "来源业务系统", false, ImportFeildVO.VARCHAR));
+			aggvo.addHeadField(new ImportFeildVO("def5", "对应红冲单据号", true, ImportFeildVO.VARCHAR));
+			aggvo.addHeadField(new ImportFeildVO("def6", "仓号", false, ImportFeildVO.VARCHAR));
+			aggvo.addHeadField(new ImportFeildVO("def7", "仓号对应虚拟部门", false, ImportFeildVO.VARCHAR));
+			aggvo.addHeadField(new ImportFeildVO("def1", "来源单据号", false, ImportFeildVO.VARCHAR));
+			
+			aggvo.addBodyFields(new ImportFeildVO("material", "物料", false, ImportFeildVO.VARCHAR));
+			aggvo.addBodyFields(new ImportFeildVO("objtype", "往来对象", false, ImportFeildVO.VARCHAR));
+			aggvo.addBodyFields(new ImportFeildVO("customer", "客户", false, ImportFeildVO.VARCHAR));
+			aggvo.addBodyFields(new ImportFeildVO("pk_currtype", "币种", false, ImportFeildVO.VARCHAR));
+			aggvo.addBodyFields(new ImportFeildVO("rate", "组织本币汇率", false, ImportFeildVO.NUMBER));
+			aggvo.addBodyFields(new ImportFeildVO("money_de", "借方原币金额（实洋）", false, ImportFeildVO.NUMBER));
+			aggvo.addBodyFields(new ImportFeildVO("def1", "借方原币金额（码洋）", false, ImportFeildVO.NUMBER));
+			aggvo.addBodyFields(new ImportFeildVO("local_money_de", "组织本币金额（实洋）", false, ImportFeildVO.NUMBER));
+			aggvo.addBodyFields(new ImportFeildVO("def2", "组织本币金额（码洋）", false, ImportFeildVO.NUMBER));
+			aggvo.addBodyFields(new ImportFeildVO("taxrate", "税率", false, ImportFeildVO.NUMBER));
+			aggvo.addBodyFields(new ImportFeildVO("taxtype", "扣税类别", false, ImportFeildVO.VARCHAR));
+			aggvo.addBodyFields(new ImportFeildVO("def3", "客户对应仓号", true, ImportFeildVO.VARCHAR));
+			aggvo.addBodyFields(new ImportFeildVO("def4", "仓号对应虚拟部门", true, ImportFeildVO.VARCHAR));
+		}
+		return aggvo;
 	}
 	
 }

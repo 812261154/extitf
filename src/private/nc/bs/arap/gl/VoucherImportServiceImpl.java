@@ -74,14 +74,13 @@ public class VoucherImportServiceImpl implements IVoucherImportService {
 				headErrMsg.append("[" + headDateFields[i] + "]");
 				continue;
 			}
-			//单据日期必须是日期型字符串
-			if(StringUtils.equals(key, "prepareddate") && !DateUtils.isFormatDateString(voucher.getString(key))) {
+			//业务来源系统校验
+			if(StringUtils.equals(key, "free3") && !BillUtils.isSourceSysLegal(voucher.getString(key))) {
 				headErrMsg.append("[" + headDateFields[i] + "]");
 				continue;
 			}
-			//外部来源系统校验
-			if((StringUtils.equals(key, "free3"))
-					&& !BillUtils.isSysNameLegal(voucher.getString(key))) {
+			//单据日期必须是日期型字符串
+			if(StringUtils.equals(key, "prepareddate") && !DateUtils.isFormatDateTimeString(voucher.getString(key))) {
 				headErrMsg.append("[" + headDateFields[i] + "]");
 				continue;
 			}

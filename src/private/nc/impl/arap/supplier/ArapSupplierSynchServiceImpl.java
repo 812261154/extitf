@@ -2,10 +2,10 @@ package nc.impl.arap.supplier;
 
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Properties;
 
 import nc.bs.arap.util.BillUtils;
-import nc.bs.arap.util.TransUtils;
+import nc.bs.arap.util.FileUtils;
 import nc.bs.framework.common.InvocationInfoProxy;
 import nc.bs.framework.common.NCLocator;
 import nc.bs.logging.Logger;
@@ -26,12 +26,7 @@ import net.sf.json.JSONObject;
 import org.apache.commons.lang.StringUtils;
 
 public class ArapSupplierSynchServiceImpl implements IArapSupplierSynchService {
-	private TransUtils importUtils = new TransUtils();
-	private String defaultGroup = "1";
-	private String defaultUser = "2";
-	private String defaultCountry = "CN";
-	private String defaultCurrtype = "CNY";
-	private String defaultSupplierclass = "2";
+	private BillUtils importUtils = new BillUtils();
 	
 	private String[] dateFields = { 
 			"操作类型", "公司", "编码", "名称", "外部来源系统"  
@@ -63,10 +58,6 @@ public class ArapSupplierSynchServiceImpl implements IArapSupplierSynchService {
 		rt.put("result", "success");
 		rt.put("message", "");
 		try {
-			Map<String, String> defaultParam = importUtils.getDefaultParam("supplier");
-			defaultGroup = defaultParam.get("default_group");
-			defaultUser = defaultParam.get("default_user");
-			defaultSupplierclass = defaultParam.get("default_supplierclass");
 			
 			JSONObject jsonCust = JSONObject.fromObject(jsonStrCust);
 			String errMsg = this.checkFieldExist(jsonCust);
@@ -74,8 +65,19 @@ public class ArapSupplierSynchServiceImpl implements IArapSupplierSynchService {
 				throw new BusinessException(errMsg);
 			}
 			
+			String sourceSys = jsonCust.getString("def1");
+			Properties p = FileUtils.getProperties("nc/bs/arap/properties/ArapWsPrams.properties");
+			String defaultGroup = p.getProperty("defaultGroup");
+			String defaultUser = p.getProperty("defaultUser");
+			String defaultSupplierclass = p.getProperty(sourceSys + "CustSupplierClass");
+			String defaultCountry = p.getProperty("defaultCountry");
+			String defaultCurrtype = p.getProperty("defaultCurrtype");
+			
 			String pk_group = importUtils.getCurrGroupPk(defaultGroup);
-			String pk_org = importUtils.getOrgByCode(pk_group, jsonCust.getString("pk_org")).getPrimaryKey();
+			String pk_org = pk_group;
+			if(!StringUtils.equals(jsonCust.getString("pk_org"), defaultGroup)) {
+				pk_org = importUtils.getOrgByCode(pk_group, jsonCust.getString("pk_org")).getPrimaryKey();
+			}
 			CountryZoneVO countryZone = importUtils.getCountryZoneFormatPkByCode(defaultCountry);
 			String pk_user = importUtils.getInitUserPkByCode(defaultUser);
 			InvocationInfoProxy.getInstance().setGroupId(pk_group);
@@ -115,11 +117,11 @@ public class ArapSupplierSynchServiceImpl implements IArapSupplierSynchService {
 				vo.setCreationtime(new UFDateTime());
 				vo.setCreator(pk_user);
 				
-				String sql = "select count(*) from bd_supplier t where t.dr =0 and t.code = '" +jsonCust.getString("code")+ "' and t.pk_org in ('" +pk_group+ "', '" +pk_org+ "')";
-				if(importUtils.isBillExit(sql)) {
-					Logger.error("[SDPG][" + ArapSupplierSynchServiceImpl.class.getName() + "],供应商编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
-					throw new BusinessException("供应商编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
-				} 
+//				String sql = "select count(*) from bd_supplier t where t.dr =0 and t.code = '" +jsonCust.getString("code")+ "' and t.pk_org in ('" +pk_group+ "', '" +pk_org+ "')";
+//				if(importUtils.isBillExit(sql)) {
+//					Logger.error("[SDPG][" + ArapSupplierSynchServiceImpl.class.getName() + "],供应商编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
+//					throw new BusinessException("供应商编码" + jsonCust.getString("code") + "已存在,请修改NC或者PMP等业务系统中的编码!");
+//				} 
 				service.insertSupplierWithExtendVO(vo, new HashMap<String, Object>(), new PrivateServiceContext(), false);
 				
 			} else if(StringUtils.equals(opType, "0")) {
